@@ -29,7 +29,7 @@ unsigned long sw1, sw2, col = 0, coln;
 short h[7] = {5,5,5,5,5,5,5};
 short grid[6][7];
 int maxDepth = 6, nextMoveLocation = -1;
-int r, res, wait = 10, gameOver = 0;
+int r, res, wait = 1, gameOver = 0;
 // *************************** Images ***************************
 
 const unsigned char logo[] ={
@@ -145,7 +145,7 @@ const unsigned char empty_slot[] ={
 
 
 
- const unsigned char cursor[] ={
+const unsigned char cursor[] ={
  0x42, 0x4D, 0x8E, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x76, 0x00, 0x00, 0x00, 0x28, 0x00, 0x00, 0x00, 0x0A, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00, 0x00, 0x01, 0x00, 0x04, 0x00, 0x00, 0x00,
  0x00, 0x00, 0x18, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x80, 0x00, 0x00, 0x80,
  0x00, 0x00, 0x00, 0x80, 0x80, 0x00, 0x80, 0x00, 0x00, 0x00, 0x80, 0x00, 0x80, 0x00, 0x80, 0x80, 0x00, 0x00, 0x80, 0x80, 0x80, 0x00, 0xC0, 0xC0, 0xC0, 0x00, 0x00, 0x00, 0xFF, 0x00, 0x00, 0xFF,
@@ -171,7 +171,7 @@ void PortF_Init(void);
 void Init_Interrupt(void);
 void GPIOPortF_Handler(void);
 void UART_Init(void);
-void UART1_Init(void);
+void UART2_Init(void);
 unsigned char UART_InChar(void);
 void UART_OutChar(unsigned char);
 void Delay100ms(unsigned long count);
@@ -199,9 +199,8 @@ int main(void){
   TExaS_Init(SSI0_Real_Nokia5110_Scope);  // set system clock to 80 MHz
   Random_Init(1);
 	PortF_Init();
-	UART1_Init();
-	srand(0);
   Nokia5110_Init();
+	UART_Init();
 	gameMode = startGame();
 	EnableInterrupts();
 	Init_Interrupt();
@@ -228,9 +227,11 @@ int main(void){
 		Nokia5110_SetCursor(0,3);
 		Nokia5110_OutString("Connecting..");
 		Delay100ms(wait);
-		p1 = rand()%10;                                                                                 ;
+		p1 = rand()%256;
 		UART_OutChar(p1);
+		Delay100ms(1);
 		p2 = UART_InChar();
+		Delay100ms(1);
 		Nokia5110_Clear();
 		if (p1 > p2){
 			Nokia5110_SetCursor(2,2);
@@ -249,13 +250,11 @@ int main(void){
 		Delay100ms(wait);
 		displayGrid();
 		while(!gameOver){
-			if(r == 1){
-				myMove();
-				UART_OutChar((col+1)+'0');
-				res = gameResult();
-				if(displayResult(res) == 1)return 0;
-				//Timer2_Init(1000000000);
-			}
+			if(r == 1)myMove();
+			UART_OutChar((col+1)+'0');
+			res = gameResult();
+			if(displayResult(res) == 1)return 0;
+			Timer2_Init(1000000000);
 			opponentMove(gameMode);
 			res = gameResult();
 			if(displayResult(res) == 1)return 0;
@@ -263,6 +262,7 @@ int main(void){
 			
 		}
 	}
+		
 
 }
 //functions definition
@@ -315,28 +315,43 @@ void GPIOPortF_Handler(void){
 		
 	}
 }
-void UART1_Init(void){
-  SYSCTL_RCGC1_R |= SYSCTL_RCGC1_UART1; // activate UART1
-  SYSCTL_RCGC2_R |= SYSCTL_RCGC2_GPIOB; // activate port B
-  UART1_CTL_R &= ~UART_CTL_UARTEN;      // disable UART
-  UART1_IBRD_R = 43;                    
-  UART1_FBRD_R = 26;                     
+void UART_Init(void){
+  SYSCTL_RCGC1_R |= SYSCTL_RCGC1_UART0; // activate UART0
+  SYSCTL_RCGC2_R |= SYSCTL_RCGC2_GPIOA; // activate port A
+  UART0_CTL_R &= ~UART_CTL_UARTEN;      // disable UART
+  UART0_IBRD_R = 43;                    // IBRD = int(50,000,000 / (16 * 115,200)) = int(27.1267)
+  UART0_FBRD_R = 26;                     // FBRD = int(0.1267 * 64 + 0.5) = 8
                                         // 8 bit word length (no parity bits, one stop bit, FIFOs)
-  UART1_LCRH_R = (UART_LCRH_WLEN_8|UART_LCRH_FEN);
-  UART1_CTL_R |= UART_CTL_UARTEN;       // enable UART
-  GPIO_PORTB_AFSEL_R |= 0x03;           // enable alt funct on PB1-0
-  GPIO_PORTB_DEN_R |= 0x03;             // enable digital I/O on PB1-0
-                                        // configure PB1-0 as UART
-  GPIO_PORTB_PCTL_R = (GPIO_PORTB_PCTL_R&0xFFFFFF00)+0x00000011;
-  GPIO_PORTB_AMSEL_R &= ~0x03;          // disable analog functionality on PB
+  UART0_LCRH_R = (UART_LCRH_WLEN_8|UART_LCRH_FEN);
+  UART0_CTL_R |= UART_CTL_UARTEN;       // enable UART
+  GPIO_PORTA_AFSEL_R |= 0x03;           // enable alt funct on PA1-0
+  GPIO_PORTA_DEN_R |= 0x03;             // enable digital I/O on PA1-0
+                                        // configure PA1-0 as UART
+  GPIO_PORTA_PCTL_R = (GPIO_PORTA_PCTL_R&0xFFFFFF00)+0x00000011;
+  GPIO_PORTA_AMSEL_R &= ~0x03;          // disable analog functionality on PA
+}
+void UART2_Init(void){
+  SYSCTL_RCGC1_R |= SYSCTL_RCGC1_UART2; // activate UART2
+  SYSCTL_RCGC2_R |= SYSCTL_RCGC2_GPIOD; // activate port D
+  UART2_CTL_R &= ~UART_CTL_UARTEN;      // disable UART
+  UART2_IBRD_R = 27;                    // IBRD = int(50,000,000 / (16 * 115,200)) = int(27.1267)
+  UART2_FBRD_R = 8;                     // FBRD = int(0.1267 * 64 + 0.5) = 8
+                                        // 8 bit word length (no parity bits, one stop bit, FIFOs)
+  UART2_LCRH_R = (UART_LCRH_WLEN_8|UART_LCRH_FEN);
+  UART2_CTL_R |= UART_CTL_UARTEN;       // enable UART
+  GPIO_PORTD_AFSEL_R |= 0x0C;           // enable alt funct on PD7-6
+  GPIO_PORTD_DEN_R |= 0x0C;             // enable digital I/O on PD7-6
+                                        // configure PA1-0 as UART
+  GPIO_PORTD_PCTL_R = (GPIO_PORTA_PCTL_R&0x00FFFFFF)+0x11000000;
+  GPIO_PORTD_AMSEL_R &= ~0x0C;          // disable analog functionality on PA
 }
 unsigned char UART_InChar(void){
-  while((UART1_FR_R&UART_FR_RXFE) != 0);
-  return((unsigned char)(UART1_DR_R&0xFF));
+  while((UART0_FR_R&UART_FR_RXFE) != 0);
+  return((unsigned char)(UART0_DR_R&0xFF));
 }
 void UART_OutChar(unsigned char data){
-  while((UART1_FR_R&UART_FR_TXFF) != 0);
-  UART1_DR_R = data;
+  while((UART0_FR_R&UART_FR_TXFF) != 0);
+  UART0_DR_R = data;
 }
 void Delay100ms(unsigned long count){unsigned long volatile time;
   while(count>0){
@@ -371,9 +386,9 @@ void Timer2A_Handler(void){
   if(r != 1){
 		Nokia5110_Clear();
 		Nokia5110_SetCursor(4,2);
-		Nokia5110_OutString("GAME");
+		Nokia5110_OutString("YOU");
 		Nokia5110_SetCursor(4,3);
-		Nokia5110_OutString("HELD:)");
+		Nokia5110_OutString("WIN:)");
 		gameOver = 1;
 	}
 }
